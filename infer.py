@@ -1,12 +1,11 @@
 import dataclasses
+import queue
+import threading
 import runpod
 import ivrit
-import types
 import logging
 
-# Maximum size for grouped arrays (in characters).
-# This ensures we are below the maximum size of an item in a RunPod stream.
-MAX_RUNPOD_STREAM_ELEMENT_SIZE = 500000
+_SENTINEL = object()
 
 # Global variables to track the currently loaded model
 current_model = None
@@ -46,7 +45,7 @@ def transcribe(job):
 
 def transcribe_core(engine, model_name, transcribe_args):
     print('Transcribing...')
-    
+
     global current_model
 
     different_model = (not current_model) or (current_model.engine != engine or current_model.model != model_name)
@@ -57,44 +56,42 @@ def transcribe_core(engine, model_name, transcribe_args):
     else:
         print(f'Reusing existing model: {engine} with {model_name}')
 
+    q = queue.Queue()
+
+    def on_progress(event):
+        q.put({"type": "progress", "data": event})
+
+    transcribe_args['on_progress'] = on_progress
     diarize = transcribe_args.get('diarize', False)
 
-    if diarize:
-        res = current_model.transcribe(**transcribe_args)
+    def producer():
+        try:
+            if diarize:
+                res = current_model.transcribe(**transcribe_args)
+                segs = res['segments']
+            else:
+                transcribe_args['stream'] = True
+                segs = current_model.transcribe(**transcribe_args)
+            for s in segs:
+                q.put({"type": "segments", "data": [dataclasses.asdict(s)]})
+        except Exception as e:
+            q.put(e)
+        finally:
+            q.put(_SENTINEL)
 
-        segs = res['segments']
-    else:
-        transcribe_args['stream'] = True 
-        segs = current_model.transcribe(**transcribe_args)
+    thread = threading.Thread(target=producer, daemon=True)
+    thread.start()
 
-    # Check if segs is a generator
-    if isinstance(segs, types.GeneratorType):
-        # For generators, yield results one by one as an array of one value
-        for s in segs:
-            yield [dataclasses.asdict(s)]
-    else:
-        # For non-generators, group multiple consecutive members into larger arrays
-        # ensuring their total size is less than MAX_RUNPOD_STREAM_ELEMENT_SIZE
-        current_group = []
-        current_size = 0
-        
-        for s in segs:
-            seg_dict = dataclasses.asdict(s)
-            seg_size = len(str(seg_dict))
-            
-            # If adding this segment would exceed the max size, yield current group
-            if current_group and (current_size + seg_size > MAX_RUNPOD_STREAM_ELEMENT_SIZE):
-                yield current_group
-                current_group = []
-                current_size = 0
-            
-            # Add segment to current group
-            current_group.append(seg_dict)
-            current_size += seg_size
-        
-        # Yield any remaining segments in the final group
-        if current_group:
-            yield current_group
+    try:
+        while True:
+            item = q.get()
+            if item is _SENTINEL:
+                break
+            if isinstance(item, Exception):
+                raise item
+            yield item
+    finally:
+        thread.join()
 
 runpod.serverless.start({"handler": transcribe, "return_aggregate_stream": True})
 
