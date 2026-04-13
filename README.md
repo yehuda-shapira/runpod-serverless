@@ -111,6 +111,30 @@ for segment in result['segments']:
     print(f"Speakers {segment.speakers}: {segment['text']}")
 ```
 
+## Building the Docker image
+
+To build and use your own Docker image instead of the pre-built one:
+
+1. Clone this repository:
+   ```
+   git clone https://github.com/ivrit-ai/runpod-serverless.git
+   cd runpod-serverless
+   ```
+
+2. Build the image:
+   ```
+   docker build -t whisper-runpod-serverless .
+   ```
+   The build pre-downloads all supported models, so it may take a while and the resulting image will be large.
+
+3. Tag and push to your registry (e.g. Docker Hub):
+   ```
+   docker tag whisper-runpod-serverless <your-dockerhub-username>/whisper-runpod-serverless:latest
+   docker push <your-dockerhub-username>/whisper-runpod-serverless:latest
+   ```
+
+4. In the RunPod endpoint configuration, set the container image to `<your-dockerhub-username>/whisper-runpod-serverless:latest`.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
