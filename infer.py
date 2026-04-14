@@ -6,6 +6,7 @@ import ivrit
 import logging
 
 _SENTINEL = object()
+MAX_BATCH_SIZE = 20
 
 # Global variables to track the currently loaded model
 current_model = None
@@ -89,7 +90,21 @@ def transcribe_core(engine, model_name, transcribe_args):
                 break
             if isinstance(item, Exception):
                 raise item
-            yield item
+
+            batch = [item]
+            while len(batch) < MAX_BATCH_SIZE and not q.empty():
+                try:
+                    more = q.get_nowait()
+                    if more is _SENTINEL:
+                        yield batch
+                        return
+                    if isinstance(more, Exception):
+                        yield batch
+                        raise more
+                    batch.append(more)
+                except queue.Empty:
+                    break
+            yield batch
     finally:
         thread.join()
 
