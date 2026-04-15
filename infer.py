@@ -1,5 +1,6 @@
 import dataclasses
 import queue
+import sys
 import threading
 import runpod
 import ivrit
@@ -107,6 +108,11 @@ def transcribe_core(engine, model_name, transcribe_args):
             yield batch
     finally:
         thread.join()
+
+import torch
+if not torch.cuda.is_available():
+    print("GPU health check failed: CUDA not available", flush=True)
+    sys.exit(1)
 
 runpod.serverless.start({"handler": transcribe, "return_aggregate_stream": True})
 
