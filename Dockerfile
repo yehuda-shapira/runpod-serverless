@@ -19,6 +19,7 @@ RUN python3 -c 'import faster_whisper; m = faster_whisper.WhisperModel("ivrit-ai
 RUN python3 -c 'import faster_whisper; m = faster_whisper.WhisperModel("large-v3-turbo")'
 RUN python3 -c 'import pyannote.audio; import torch; from pyannote.audio.core.task import Problem, Resolution, Specifications; torch.serialization.add_safe_globals([Problem, Resolution, Specifications, torch.torch_version.TorchVersion]); p = pyannote.audio.Pipeline.from_pretrained("ivrit-ai/pyannote-speaker-diarization-3.1")'
 RUN python3 -c 'from speechbrain.inference.speaker import EncoderClassifier; EncoderClassifier.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb")'
+RUN python3 -c 'import faster_whisper; faster_whisper.WhisperModel("HebArabNlpProject/whisperLevantine")'
 
 # Add your file
 ADD infer.py .
